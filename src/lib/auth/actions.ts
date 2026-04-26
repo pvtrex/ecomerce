@@ -2,7 +2,7 @@
 
 import {cookies, headers} from "next/headers";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/server";
 import { db } from "@/lib/db";
 import { guests } from "@/lib/db/schema/index";
 import { and, eq, lt } from "drizzle-orm";
@@ -15,10 +15,6 @@ const COOKIE_OPTIONS = {
   path: "/" as const,
   maxAge: 60 * 60 * 24 * 7, // 7 days
 };
-
-const emailSchema = z.string().email();
-const passwordSchema = z.string().min(8).max(128);
-const nameSchema = z.string().min(1).max(100);
 
 export async function createGuestSession() {
   const cookieStore = await cookies();
@@ -54,63 +50,45 @@ export async function guestSession() {
   return { sessionToken: token };
 }
 
-const signUpSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-  name: nameSchema,
-});
-
 export async function signUp(formData: FormData) {
-  const rawData = {
-    name: formData.get('name') as string,
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
-  }
+  const email = formData.get('email') as string;
+  const name = formData.get('name') as string;
+  const password = formData.get('password') as string;
 
-  const data = signUpSchema.parse(rawData);
-
-  const res = await auth.api.signUpEmail({
-    body: {
-      email: data.email,
-      password: data.password,
-      name: data.name,
-    },
+  const { error, data } = await auth.signUp.email({
+    email,
+    password,
+    name,
   });
 
+  if (error) {
+    throw new Error(error.message);
+  }
+
   await migrateGuestToUser();
-  return { ok: true, userId: res.user?.id };
+  return { ok: true, userId: data?.user?.id };
 }
 
-const signInSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-});
-
 export async function signIn(formData: FormData) {
-  const rawData = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
-  }
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
 
-  const data = signInSchema.parse(rawData);
-
-  const res = await auth.api.signInEmail({
-    body: {
-      email: data.email,
-      password: data.password,
-    },
+  const { error, data } = await auth.signIn.email({
+    email,
+    password,
   });
 
+  if (error) {
+    throw new Error(error.message);
+  }
+
   await migrateGuestToUser();
-  return { ok: true, userId: res.user?.id };
+  return { ok: true, userId: data?.user?.id };
 }
 
 export async function getCurrentUser() {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers()
-    })
-
+    const { data: session } = await auth.getSession();
     return session?.user ?? null;
   } catch (e) {
     console.log(e);
@@ -119,7 +97,9 @@ export async function getCurrentUser() {
 }
 
 export async function signOut() {
-  await auth.api.signOut({ headers: {} });
+  // Neon Auth might have a different signOut method or we just clear cookies
+  // According to Better Auth (which Neon Auth uses under the hood), it's auth.signOut()
+  await auth.signOut();
   return { ok: true };
 }
 

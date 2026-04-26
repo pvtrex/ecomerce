@@ -1,6 +1,17 @@
+"use client";
+
 import AuthForm from "@/components/AuthForm";
-import {signUp} from "@/lib/auth/actions";
+import { signUpWithEmail } from "@/app/auth/sign-up/actions";
 
 export default function Page() {
-  return <AuthForm mode="sign-up" onSubmit={signUp} />;
+  const handleSubmit = async (formData: FormData) => {
+    const res = await signUpWithEmail(null, formData);
+    if (res?.error) {
+      alert(res.error);
+      return { ok: false };
+    }
+    return { ok: true };
+  };
+
+  return <AuthForm mode="sign-up" onSubmit={handleSubmit} />;
 }
